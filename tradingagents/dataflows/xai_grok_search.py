@@ -37,6 +37,7 @@ def _call_responses_api(query: str, tools: list, max_tokens: int = 2000) -> str:
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
+        "User-Agent": "PrideRockOS/1.0",
     }
 
     payload = {
