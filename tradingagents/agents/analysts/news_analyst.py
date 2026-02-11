@@ -16,8 +16,14 @@ def create_news_analyst(llm):
         ]
 
         system_message = (
-            "You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(query, start_date, end_date) for company-specific or targeted news searches, and get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            "You are a news analyst. Use get_news for company-specific news and get_global_news for macro news.\n\n"
+            "Output your report in this exact structure:\n"
+            "**Company Catalysts**: Top 3 most impactful recent news items with dates and price impact assessment\n"
+            "**Macro Environment**: Key macro factors affecting this stock (rates, sector rotation, geopolitics)\n"
+            "**Sentiment Shift**: Is news sentiment improving or deteriorating vs last week?\n"
+            "**Upcoming Events**: Earnings dates, regulatory decisions, or catalysts in next 2 weeks\n"
+            "**Signal**: News-driven BUY/SELL/HOLD leaning with key catalyst\n\n"
+            "Be specific with dates and facts. No filler. Skip news that doesn't affect the trading decision."
         )
 
         prompt = ChatPromptTemplate.from_messages(

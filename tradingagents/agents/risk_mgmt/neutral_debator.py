@@ -18,19 +18,21 @@ def create_neutral_debator(llm):
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
+        prompt = f"""Neutral Risk Analyst: Find the OPTIMAL risk-adjusted position from the trader's plan.
 
-{trader_decision}
+Trader's plan: {trader_decision}
 
-Your task is to challenge both the Aggressive and Conservative Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:
+Structure:
+1. **Aggressive is wrong about**: [one specific overreach with data]
+2. **Conservative is wrong about**: [one specific overcaution with data]
+3. **Optimal position**: Specific position size, entry, stop-loss that balances both views
 
-Market Research Report: {market_research_report}
-Social Media Sentiment Report: {sentiment_report}
-Latest World Affairs Report: {news_report}
-Company Fundamentals Report: {fundamentals_report}
-Here is the current conversation history: {history} Here is the last response from the aggressive analyst: {current_aggressive_response} Here is the last response from the conservative analyst: {current_conservative_response}. If there are no responses from the other viewpoints, do not hallucinate and just present your point.
+Data: Market={market_research_report[:500]} | Fundamentals={fundamentals_report[:500]}
+History: {history}
+Aggressive said: {current_aggressive_response[:300]}
+Conservative said: {current_conservative_response[:300]}
 
-Engage actively by analyzing both sides critically, addressing weaknesses in the aggressive and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""
+Be direct. If no prior responses exist, just present your case. No filler."""
 
         response = llm.invoke(prompt)
 

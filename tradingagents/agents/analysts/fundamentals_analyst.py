@@ -19,9 +19,15 @@ def create_fundamentals_analyst(llm):
         ]
 
         system_message = (
-            "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
-            + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements.",
+            "You are a fundamentals analyst. Use get_fundamentals, get_balance_sheet, get_cashflow, and get_income_statement to gather data.\n\n"
+            "Output your report in this exact structure:\n"
+            "**Valuation**: PE, PEG, forward PE, and whether stock is overvalued/undervalued vs peers\n"
+            "**Revenue & Earnings**: YoY growth rates, sequential trends, beat/miss history\n"
+            "**Balance Sheet Health**: Debt/equity, current ratio, cash position, red flags\n"
+            "**Cash Flow**: Free cash flow trend, capex intensity, buyback/dividend sustainability\n"
+            "**Margins**: Gross, operating, net — expanding or compressing and why\n"
+            "**Signal**: Fundamental BUY/SELL/HOLD leaning with key risk\n\n"
+            "Be specific with numbers. No filler. Every sentence must contain data or an actionable insight."
         )
 
         prompt = ChatPromptTemplate.from_messages(
