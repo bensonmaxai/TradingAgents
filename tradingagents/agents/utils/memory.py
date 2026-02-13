@@ -12,14 +12,16 @@ import re
 class FinancialSituationMemory:
     """Memory system for storing and retrieving financial situations using BM25."""
 
-    def __init__(self, name: str, config: dict = None):
+    def __init__(self, name: str, config: dict = None, max_documents: int = 50):
         """Initialize the memory system.
 
         Args:
             name: Name identifier for this memory instance
             config: Configuration dict (kept for API compatibility, not used for BM25)
+            max_documents: Maximum documents to retain (FIFO eviction). 0 = unlimited.
         """
         self.name = name
+        self.max_documents = max_documents
         self.documents: List[str] = []
         self.recommendations: List[str] = []
         self.bm25 = None
@@ -50,6 +52,12 @@ class FinancialSituationMemory:
         for situation, recommendation in situations_and_advice:
             self.documents.append(situation)
             self.recommendations.append(recommendation)
+
+        # FIFO eviction: remove oldest if cap exceeded
+        if self.max_documents > 0 and len(self.documents) > self.max_documents:
+            excess = len(self.documents) - self.max_documents
+            self.documents = self.documents[excess:]
+            self.recommendations = self.recommendations[excess:]
 
         # Rebuild BM25 index with new documents
         self._rebuild_index()
