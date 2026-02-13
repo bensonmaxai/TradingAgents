@@ -19,6 +19,14 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        memory_instruction = ""
+        if past_memory_str.strip():
+            memory_instruction = f"""
+⚠️ CRITICAL — Past mistakes to avoid (from actual P&L outcomes):
+{past_memory_str}
+Before deciding, CHECK if your current call repeats any mistake above. If so, explicitly state how you are adjusting to avoid repeating it.
+"""
+
         prompt = f"""You are the Research Manager. Evaluate the bull/bear debate and make a DECISIVE call.
 
 Output in this exact structure:
@@ -27,11 +35,10 @@ Output in this exact structure:
 **Key reason**: The single most important factor driving your decision
 **Risk**: The biggest risk to your call
 **Action plan**: 2-3 concrete steps for the trader (entry/exit prices, position size, stop-loss)
+**Lessons applied**: Which past lesson(s) influenced this decision, if any
 
 Do NOT default to HOLD as a compromise. Pick a side based on evidence strength.
-
-Past mistakes to avoid: {past_memory_str}
-
+{memory_instruction}
 Debate:
 {history}"""
         response = llm.invoke(prompt)

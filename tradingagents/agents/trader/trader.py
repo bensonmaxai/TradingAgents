@@ -27,6 +27,14 @@ def create_trader(llm, memory):
             "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
         }
 
+        memory_instruction = ""
+        if past_memory_str.strip() and past_memory_str != "No past memories found.":
+            memory_instruction = f"""
+
+⚠️ CRITICAL — Past Trading Lessons (from actual P&L outcomes):
+{past_memory_str}
+You MUST adjust your entry/stop-loss/target based on these lessons. If a past lesson suggests tighter stops or different position sizing for similar setups, APPLY it. State which lesson influenced your plan."""
+
         messages = [
             {
                 "role": "system",
@@ -40,8 +48,7 @@ def create_trader(llm, memory):
 **Confidence**: [High/Medium/Low with one-line reason]
 
 Then conclude with: FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**
-
-Past lessons: {past_memory_str}""",
+{memory_instruction}""",
             },
             context,
         ]

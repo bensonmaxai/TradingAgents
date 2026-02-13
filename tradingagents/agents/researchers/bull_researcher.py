@@ -22,15 +22,22 @@ def create_bull_researcher(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        memory_block = ""
+        if past_memory_str.strip():
+            memory_block = f"""
+⚠️ CRITICAL — Past Trading Lessons (from actual P&L outcomes):
+{past_memory_str}
+You MUST factor these lessons into your bull case. If a past lesson contradicts your current argument, explicitly address why this time is different. Do NOT repeat mistakes identified above.
+---
+"""
+
         prompt = f"""You are the Bull Analyst. Make the strongest case FOR investing, using specific data from the reports below. Counter the bear's key arguments directly.
 
 Structure your response:
 1. **Strongest bull case** (2-3 points with specific numbers from reports)
 2. **Bear rebuttal** (address bear's weakest argument with data)
 3. **Catalyst** (what will drive the stock higher, with timeline)
-
-Past lessons: {past_memory_str}
----
+{memory_block}
 Market data: {market_research_report}
 Sentiment: {sentiment_report}
 News: {news_report}

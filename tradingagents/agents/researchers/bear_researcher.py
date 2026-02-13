@@ -22,15 +22,22 @@ def create_bear_researcher(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        memory_block = ""
+        if past_memory_str.strip():
+            memory_block = f"""
+⚠️ CRITICAL — Past Trading Lessons (from actual P&L outcomes):
+{past_memory_str}
+You MUST factor these lessons into your bear case. If a past lesson shows bearish calls were wrong in similar conditions, explicitly address why this time the risk is real. Do NOT repeat mistakes identified above.
+---
+"""
+
         prompt = f"""You are the Bear Analyst. Make the strongest case AGAINST investing, using specific data from the reports below. Counter the bull's key arguments directly.
 
 Structure your response:
 1. **Biggest risks** (2-3 points with specific numbers from reports)
 2. **Bull rebuttal** (expose the bull's weakest assumption with data)
 3. **Downside catalyst** (what could drive the stock lower, with timeline)
-
-Past lessons: {past_memory_str}
----
+{memory_block}
 Market data: {market_research_report}
 Sentiment: {sentiment_report}
 News: {news_report}

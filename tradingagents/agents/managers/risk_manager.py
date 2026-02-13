@@ -22,6 +22,14 @@ def create_risk_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        memory_instruction = ""
+        if past_memory_str.strip():
+            memory_instruction = f"""
+⚠️ CRITICAL — Past mistakes to avoid (from actual P&L outcomes):
+{past_memory_str}
+You MUST check if the current trade setup resembles any past mistake above. If it does, either REJECT the trade or explicitly adjust position size/stop-loss/target to compensate. State which lesson you applied.
+"""
+
         prompt = f"""You are the Risk Management Judge. Make the FINAL trading decision.
 
 Output in this exact structure:
@@ -30,12 +38,12 @@ Output in this exact structure:
 **Position**: [Specific % of portfolio]
 **Entry**: [Price or range]
 **Stop-loss**: [Price] (max acceptable loss)
-**Target**: [Price, timeframe]
+**Target 1**: [Price] (partial take-profit)
+**Target 2**: [Price, timeframe] (full exit)
 **Key risk**: [Single biggest threat to this trade]
+**Lessons applied**: Which past lesson(s) influenced this decision
 **Risk-adjusted rationale**: [3-4 sentences — which analyst was most right and why, adjusted from trader's plan: {trader_plan}]
-
-Past mistakes to avoid: {past_memory_str}
-
+{memory_instruction}
 Risk debate:
 {history}
 
