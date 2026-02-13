@@ -1,6 +1,7 @@
 # TradingAgents/graph/setup.py
 
 from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, START
 from langgraph.prebuilt import ToolNode
@@ -102,10 +103,54 @@ class GraphSetup:
             self.deep_thinking_llm, self.risk_manager_memory
         )
 
+        # --- Parallel composite nodes ---
+        # Bull + Bear opening statements run in parallel (round 1)
+        def parallel_opening(state):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                f_bull = pool.submit(bull_researcher_node, dict(state))
+                f_bear = pool.submit(bear_researcher_node, dict(state))
+            bull_ds = f_bull.result()["investment_debate_state"]
+            bear_ds = f_bear.result()["investment_debate_state"]
+            return {
+                "investment_debate_state": {
+                    "history": (bull_ds.get("bull_history", "") + "\n" +
+                                bear_ds.get("bear_history", "")),
+                    "bull_history": bull_ds.get("bull_history", ""),
+                    "bear_history": bear_ds.get("bear_history", ""),
+                    "current_response": bear_ds.get("current_response", ""),
+                    "count": 2,
+                }
+            }
+
+        # Aggressive + Conservative + Neutral risk assessments in parallel
+        def parallel_risk(state):
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                f_agg = pool.submit(aggressive_analyst, dict(state))
+                f_con = pool.submit(conservative_analyst, dict(state))
+                f_neu = pool.submit(neutral_analyst, dict(state))
+            agg_ds = f_agg.result()["risk_debate_state"]
+            con_ds = f_con.result()["risk_debate_state"]
+            neu_ds = f_neu.result()["risk_debate_state"]
+            return {
+                "risk_debate_state": {
+                    "history": (agg_ds.get("aggressive_history", "") + "\n" +
+                                con_ds.get("conservative_history", "") + "\n" +
+                                neu_ds.get("neutral_history", "")),
+                    "aggressive_history": agg_ds.get("aggressive_history", ""),
+                    "conservative_history": con_ds.get("conservative_history", ""),
+                    "neutral_history": neu_ds.get("neutral_history", ""),
+                    "latest_speaker": "Neutral",
+                    "current_aggressive_response": agg_ds.get("current_aggressive_response", ""),
+                    "current_conservative_response": con_ds.get("current_conservative_response", ""),
+                    "current_neutral_response": neu_ds.get("current_neutral_response", ""),
+                    "count": 3,
+                }
+            }
+
         # Create workflow
         workflow = StateGraph(AgentState)
 
-        # Add analyst nodes to the graph
+        # Add analyst nodes to the graph (only when not in fast mode)
         for analyst_type, node in analyst_nodes.items():
             workflow.add_node(f"{analyst_type.capitalize()} Analyst", node)
             workflow.add_node(
@@ -113,20 +158,19 @@ class GraphSetup:
             )
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
 
-        # Add other nodes
+        # Add parallel + sequential nodes
+        workflow.add_node("Parallel Opening", parallel_opening)
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
         workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
+        workflow.add_node("Parallel Risk", parallel_risk)
         workflow.add_node("Risk Judge", risk_manager_node)
 
         # Define edges
         if len(selected_analysts) == 0:
-            # Fast mode: skip analysts, go directly to Bull Researcher
-            workflow.add_edge(START, "Bull Researcher")
+            # Fast mode: skip analysts, go to parallel opening
+            workflow.add_edge(START, "Parallel Opening")
         else:
             # Normal mode: start with the first analyst
             first_analyst = selected_analysts[0]
@@ -138,7 +182,6 @@ class GraphSetup:
                 current_tools = f"tools_{analyst_type}"
                 current_clear = f"Msg Clear {analyst_type.capitalize()}"
 
-                # Add conditional edges for current analyst
                 workflow.add_conditional_edges(
                     current_analyst,
                     getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
@@ -146,14 +189,23 @@ class GraphSetup:
                 )
                 workflow.add_edge(current_tools, current_analyst)
 
-                # Connect to next analyst or to Bull Researcher if this is the last analyst
+                # Last analyst → Parallel Opening (instead of Bull Researcher)
                 if i < len(selected_analysts) - 1:
                     next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
                     workflow.add_edge(current_clear, next_analyst)
                 else:
-                    workflow.add_edge(current_clear, "Bull Researcher")
+                    workflow.add_edge(current_clear, "Parallel Opening")
 
-        # Add remaining edges
+        # Parallel Opening → conditional → Bull Rebuttal or Research Manager
+        workflow.add_conditional_edges(
+            "Parallel Opening",
+            self.conditional_logic.should_continue_debate,
+            {
+                "Bull Researcher": "Bull Researcher",
+                "Research Manager": "Research Manager",
+            },
+        )
+        # Bull/Bear rebuttal rounds (sequential alternation)
         workflow.add_conditional_edges(
             "Bull Researcher",
             self.conditional_logic.should_continue_debate,
@@ -170,33 +222,11 @@ class GraphSetup:
                 "Research Manager": "Research Manager",
             },
         )
-        workflow.add_edge("Research Manager", "Trader")
-        workflow.add_edge("Trader", "Aggressive Analyst")
-        workflow.add_conditional_edges(
-            "Aggressive Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Conservative Analyst": "Conservative Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Conservative Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Neutral Analyst": "Neutral Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Neutral Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Aggressive Analyst": "Aggressive Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
 
+        # Research Manager → Trader → Parallel Risk → Risk Judge → END
+        workflow.add_edge("Research Manager", "Trader")
+        workflow.add_edge("Trader", "Parallel Risk")
+        workflow.add_edge("Parallel Risk", "Risk Judge")
         workflow.add_edge("Risk Judge", END)
 
         # Compile and return
