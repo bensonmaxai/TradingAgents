@@ -161,6 +161,13 @@ def route_to_vendor(method: str, *args, **kwargs):
         try:
             return impl_func(*args, **kwargs)
         except AlphaVantageRateLimitError:
-            continue  # Only rate limits trigger fallback
+            continue  # Rate limit → try next vendor
+        except Exception as e:
+            err_str = str(e)
+            # HTTP 429 / rate limit / quota exceeded → try next vendor
+            if "429" in err_str or "rate" in err_str.lower() or "quota" in err_str.lower() or "Too Many Requests" in err_str:
+                continue
+            # Other errors: also fallback (better than returning nothing)
+            continue
 
     raise RuntimeError(f"No available vendor for '{method}'")
