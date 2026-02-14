@@ -32,14 +32,25 @@ You MUST check if the current trade setup resembles any past mistake above. If i
 
         prompt = f"""You are the Risk Management Judge. Make the FINAL trading decision.
 
+ALLOWED DECISIONS (pick exactly one):
+- BUY — open a new long position
+- SELL — open a new short position
+- HOLD — no action
+- CLOSE_LONG — exit an existing long position
+- CLOSE_SHORT — exit an existing short position
+
+CONSTRAINTS:
+- Do NOT suggest partial position reduction, hedging, or simultaneous long+short. The system executes ONE action per signal.
+- Do NOT suggest portfolio allocation percentages. Position size is calculated automatically by risk control.
+- Entry/Stop-loss/Targets must be specific prices, not ranges wider than 2%.
+
 Output in this exact structure:
-**DECISION**: BUY / SELL / HOLD
+**DECISION**: [one of BUY / SELL / HOLD / CLOSE_LONG / CLOSE_SHORT]
 **Confidence**: [High/Medium/Low]
-**Position**: [Specific % of portfolio]
-**Entry**: [Price or range]
-**Stop-loss**: [Price] (max acceptable loss)
-**Target 1**: [Price] (partial take-profit)
-**Target 2**: [Price, timeframe] (full exit)
+**Entry**: [Price or tight range]
+**Stop-loss**: [Price] (mandatory, max 20% from entry)
+**Target 1**: [Price] (partial take-profit ~50%)
+**Target 2**: [Price] (full exit)
 **Key risk**: [Single biggest threat to this trade]
 **Lessons applied**: Which past lesson(s) influenced this decision
 **Risk-adjusted rationale**: [3-4 sentences — which analyst was most right and why, adjusted from trader's plan: {trader_plan}]

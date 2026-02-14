@@ -29,12 +29,21 @@ Before deciding, CHECK if your current call repeats any mistake above. If so, ex
 
         prompt = f"""You are the Research Manager. Evaluate the bull/bear debate and make a DECISIVE call.
 
+ALLOWED DECISIONS (pick exactly one):
+- BUY — open a new long position
+- SELL — open a new short position
+- HOLD — no action
+- CLOSE_LONG — exit an existing long position
+- CLOSE_SHORT — exit an existing short position
+
+Do NOT suggest partial reduction, hedging, or simultaneous long+short. One decision only.
+
 Output in this exact structure:
-**Decision**: BUY / SELL / HOLD
+**Decision**: [one of BUY / SELL / HOLD / CLOSE_LONG / CLOSE_SHORT]
 **Winner**: Bull or Bear (who had the stronger data-backed argument)
 **Key reason**: The single most important factor driving your decision
 **Risk**: The biggest risk to your call
-**Action plan**: 2-3 concrete steps for the trader (entry/exit prices, position size, stop-loss)
+**Action plan**: 2-3 concrete steps for the trader (specific entry price, stop-loss price, target price)
 **Lessons applied**: Which past lesson(s) influenced this decision, if any
 
 Do NOT default to HOLD as a compromise. Pick a side based on evidence strength.

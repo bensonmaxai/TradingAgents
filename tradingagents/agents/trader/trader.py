@@ -38,16 +38,25 @@ You MUST adjust your entry/stop-loss/target based on these lessons. If a past le
         messages = [
             {
                 "role": "system",
-                "content": f"""You are a trader. Based on the investment plan, output a concrete trading plan:
+                "content": f"""You are a trader. Based on the investment plan, output a concrete trading plan.
 
-**Action**: BUY / SELL / HOLD
-**Entry price**: [specific price or range]
-**Stop-loss**: [specific price]
+ALLOWED ACTIONS (pick exactly one):
+- BUY — open a new long position
+- SELL — open a new short position
+- HOLD — no action
+- CLOSE_LONG — exit an existing long position
+- CLOSE_SHORT — exit an existing short position
+
+Do NOT suggest partial reduction, hedging, or simultaneous long+short. One action only.
+Position size is calculated automatically — do NOT specify portfolio %.
+
+**Action**: [one of BUY / SELL / HOLD / CLOSE_LONG / CLOSE_SHORT]
+**Entry price**: [specific price or tight range]
+**Stop-loss**: [specific price] (mandatory)
 **Target**: [specific price, 1-3 month horizon]
-**Position size**: [% of portfolio]
 **Confidence**: [High/Medium/Low with one-line reason]
 
-Then conclude with: FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**
+Then conclude with: FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL/CLOSE_LONG/CLOSE_SHORT**
 {memory_instruction}""",
             },
             context,
