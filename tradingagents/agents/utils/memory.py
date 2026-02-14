@@ -24,6 +24,8 @@ class FinancialSituationMemory:
         self.max_documents = max_documents
         self.documents: List[str] = []
         self.recommendations: List[str] = []
+        self.pinned_documents: List[str] = []
+        self.pinned_recommendations: List[str] = []
         self.bm25 = None
 
     def _tokenize(self, text: str) -> List[str]:
@@ -36,9 +38,10 @@ class FinancialSituationMemory:
         return tokens
 
     def _rebuild_index(self):
-        """Rebuild the BM25 index after adding documents."""
-        if self.documents:
-            tokenized_docs = [self._tokenize(doc) for doc in self.documents]
+        """Rebuild the BM25 index after adding documents (pinned + regular)."""
+        all_docs = self.pinned_documents + self.documents
+        if all_docs:
+            tokenized_docs = [self._tokenize(doc) for doc in all_docs]
             self.bm25 = BM25Okapi(tokenized_docs)
         else:
             self.bm25 = None
@@ -65,6 +68,8 @@ class FinancialSituationMemory:
     def get_memories(self, current_situation: str, n_matches: int = 1) -> List[dict]:
         """Find matching recommendations using BM25 similarity.
 
+        Searches across both pinned (playbook) and regular (reflection) entries.
+
         Args:
             current_situation: The current financial situation to match against
             n_matches: Number of top matches to return
@@ -72,7 +77,10 @@ class FinancialSituationMemory:
         Returns:
             List of dicts with matched_situation, recommendation, and similarity_score
         """
-        if not self.documents or self.bm25 is None:
+        all_docs = self.pinned_documents + self.documents
+        all_recs = self.pinned_recommendations + self.recommendations
+
+        if not all_docs or self.bm25 is None:
             return []
 
         # Tokenize query
@@ -92,18 +100,23 @@ class FinancialSituationMemory:
             # Normalize score to 0-1 range for consistency
             normalized_score = scores[idx] / max_score if max_score > 0 else 0
             results.append({
-                "matched_situation": self.documents[idx],
-                "recommendation": self.recommendations[idx],
+                "matched_situation": all_docs[idx],
+                "recommendation": all_recs[idx],
                 "similarity_score": normalized_score,
             })
 
         return results
 
-    def clear(self):
-        """Clear all stored memories."""
+    def clear(self, include_pinned=False):
+        """Clear stored memories. Pinned entries preserved unless include_pinned=True."""
         self.documents = []
         self.recommendations = []
+        if include_pinned:
+            self.pinned_documents = []
+            self.pinned_recommendations = []
         self.bm25 = None
+        if not include_pinned and self.pinned_documents:
+            self._rebuild_index()
 
 
 if __name__ == "__main__":
