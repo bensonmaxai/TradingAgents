@@ -230,7 +230,10 @@ class TradingAgentsGraph:
         self._log_state(trade_date, final_state)
 
         # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, self.process_signal(
+            final_state["final_trade_decision"],
+            market_type=final_state.get("market_type", "crypto"),
+        )
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
@@ -292,6 +295,6 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal):
+    def process_signal(self, full_signal, market_type="crypto"):
         """Process a signal to extract the core decision."""
-        return self.signal_processor.process_signal(full_signal)
+        return self.signal_processor.process_signal(full_signal, market_type=market_type)
