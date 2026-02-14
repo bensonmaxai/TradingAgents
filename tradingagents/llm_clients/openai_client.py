@@ -60,6 +60,8 @@ class OpenAIClient(BaseLLMClient):
             llm_kwargs["api_key"] = "ollama"  # Ollama doesn't require auth
         elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
+            # Custom proxy (e.g. codex_proxy) only supports /v1/chat/completions
+            llm_kwargs["use_responses_api"] = False
 
         for key in ("timeout", "max_retries", "reasoning_effort", "api_key", "callbacks"):
             if key in self.kwargs:
