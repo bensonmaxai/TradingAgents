@@ -63,7 +63,12 @@ def get_news_yfinance(
         Formatted string containing news articles
     """
     try:
-        stock = yf.Ticker(ticker)
+        # Convert Bybit crypto tickers (e.g., BTCUSDT → BTC-USD) for yfinance
+        yf_ticker = ticker
+        if ticker.endswith("USDT"):
+            yf_ticker = ticker.replace("USDT", "-USD")
+
+        stock = yf.Ticker(yf_ticker)
         news = stock.get_news(count=20)
 
         if not news:

@@ -101,11 +101,29 @@ def get_news_xai_grok(
             },
         ]
 
-        query = (
-            f"Latest news and analysis for ${ticker} stock from {start_date} to {end_date}. "
-            f"Include: earnings reports, analyst upgrades/downgrades, insider activity, "
-            f"regulatory news, product announcements, and X/Twitter sentiment."
-        )
+        # Crypto tickers: strip "USDT" suffix and search as cryptocurrency
+        is_crypto = ticker.endswith("USDT")
+        if is_crypto:
+            coin = ticker.replace("USDT", "")
+            # Map common aliases
+            coin_names = {"BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana",
+                          "XRP": "Ripple XRP", "DOGE": "Dogecoin", "ADA": "Cardano",
+                          "DOT": "Polkadot", "AVAX": "Avalanche", "LINK": "Chainlink",
+                          "UNI": "Uniswap", "PEPE": "PEPE coin", "TAO": "Bittensor TAO",
+                          "SUI": "SUI crypto", "XAUT": "Tether Gold XAUT"}
+            coin_label = coin_names.get(coin, f"{coin} crypto")
+            query = (
+                f"Latest news and analysis for {coin_label} (${coin}) cryptocurrency "
+                f"from {start_date} to {end_date}. "
+                f"Include: on-chain activity, whale movements, exchange flows, "
+                f"regulatory news, protocol upgrades, partnerships, and X/Twitter sentiment."
+            )
+        else:
+            query = (
+                f"Latest news and analysis for ${ticker} stock from {start_date} to {end_date}. "
+                f"Include: earnings reports, analyst upgrades/downgrades, insider activity, "
+                f"regulatory news, product announcements, and X/Twitter sentiment."
+            )
 
         result = _call_responses_api(query, tools)
 
