@@ -2,6 +2,8 @@ import functools
 import time
 import json
 
+from tradingagents.agents.utils.agent_states import get_signal_constraints
+
 
 def create_trader(llm, memory):
     def trader_node(state, name):
@@ -27,6 +29,9 @@ def create_trader(llm, memory):
             "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
         }
 
+        market_type = state.get("market_type", "crypto")
+        signal_constraints = get_signal_constraints(market_type)
+
         memory_instruction = ""
         if past_memory_str.strip() and past_memory_str != "No past memories found.":
             memory_instruction = f"""
@@ -40,23 +45,15 @@ You MUST adjust your entry/stop-loss/target based on these lessons. If a past le
                 "role": "system",
                 "content": f"""You are a trader. Based on the investment plan, output a concrete trading plan.
 
-ALLOWED ACTIONS (pick exactly one):
-- BUY — open a new long position
-- SELL — open a new short position
-- HOLD — no action
-- CLOSE_LONG — exit an existing long position
-- CLOSE_SHORT — exit an existing short position
+{signal_constraints}
 
-Do NOT suggest partial reduction, hedging, or simultaneous long+short. One action only.
-Position size is calculated automatically — do NOT specify portfolio %.
-
-**Action**: [one of BUY / SELL / HOLD / CLOSE_LONG / CLOSE_SHORT]
+**Action**: [your decision]
 **Entry price**: [specific price or tight range]
 **Stop-loss**: [specific price] (mandatory)
 **Target**: [specific price, 1-3 month horizon]
 **Confidence**: [High/Medium/Low with one-line reason]
 
-Then conclude with: FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL/CLOSE_LONG/CLOSE_SHORT**
+Then conclude with: FINAL TRANSACTION PROPOSAL: **[your decision]**
 {memory_instruction}""",
             },
             context,

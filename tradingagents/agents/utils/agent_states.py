@@ -50,6 +50,7 @@ class RiskDebateState(TypedDict):
 class AgentState(MessagesState):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
+    market_type: Annotated[str, "Market type: 'crypto', 'us', or 'tw'"]
 
     sender: Annotated[str, "Agent that sent this message"]
 
@@ -74,3 +75,25 @@ class AgentState(MessagesState):
         RiskDebateState, "Current state of the debate on evaluating risk"
     ]
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
+
+
+def get_signal_constraints(market_type: str) -> str:
+    """Return allowed signals and constraints based on market type."""
+    if market_type == "crypto":
+        return """ALLOWED DECISIONS (pick exactly one):
+- BUY — open a new long position
+- SELL — open a new short position
+- HOLD — no action
+- CLOSE_LONG — exit an existing long position
+- CLOSE_SHORT — exit an existing short position
+
+Do NOT suggest partial reduction, hedging, or simultaneous long+short. One decision only.
+Position size is calculated automatically — do NOT specify portfolio %."""
+    else:
+        return """ALLOWED DECISIONS (pick exactly one):
+- BUY — buy shares (open or add to position)
+- SELL — sell existing holdings (reduce or exit position)
+- HOLD — no action
+
+This is a stock (long-only). Do NOT suggest short selling, CLOSE_LONG, or CLOSE_SHORT.
+Position size is calculated automatically — do NOT specify portfolio %."""

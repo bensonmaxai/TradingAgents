@@ -17,6 +17,7 @@ class Propagator:
 
     def create_initial_state(
         self, company_name: str, trade_date: str,
+        market_type: str = "crypto",
         pre_reports: Dict[str, str] = None,
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph.
@@ -24,6 +25,7 @@ class Propagator:
         Args:
             company_name: Ticker symbol
             trade_date: Trading date string
+            market_type: Market type ('crypto', 'us', or 'tw')
             pre_reports: Optional dict with pre-fetched report strings
                          (market_report, fundamentals_report, sentiment_report, news_report).
                          When provided, analysts can be skipped (fast mode).
@@ -32,6 +34,7 @@ class Propagator:
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
+            "market_type": market_type,
             "investment_debate_state": InvestDebateState(
                 {"history": "", "current_response": "", "count": 0}
             ),

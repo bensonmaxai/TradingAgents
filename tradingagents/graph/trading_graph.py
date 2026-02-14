@@ -188,12 +188,13 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date, pre_reports=None):
+    def propagate(self, company_name, trade_date, market_type="crypto", pre_reports=None):
         """Run the trading agents graph for a company on a specific date.
 
         Args:
             company_name: Ticker symbol
             trade_date: Trading date string
+            market_type: Market type ('crypto', 'us', or 'tw')
             pre_reports: Optional dict with pre-fetched report strings.
                          When provided with selected_analysts=[], skips
                          analyst LLM calls entirely (fast mode).
@@ -203,7 +204,7 @@ class TradingAgentsGraph:
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, pre_reports=pre_reports
+            company_name, trade_date, market_type=market_type, pre_reports=pre_reports
         )
         args = self.propagator.get_graph_args()
 

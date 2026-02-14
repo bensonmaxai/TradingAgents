@@ -1,6 +1,8 @@
 import time
 import json
 
+from tradingagents.agents.utils.agent_states import get_signal_constraints
+
 
 def create_risk_manager(llm, memory):
     def risk_manager_node(state) -> dict:
@@ -11,7 +13,7 @@ def create_risk_manager(llm, memory):
         risk_debate_state = state["risk_debate_state"]
         market_research_report = state["market_report"]
         news_report = state["news_report"]
-        fundamentals_report = state["news_report"]
+        fundamentals_report = state["fundamentals_report"]
         sentiment_report = state["sentiment_report"]
         trader_plan = state["investment_plan"]
 
@@ -21,6 +23,9 @@ def create_risk_manager(llm, memory):
         past_memory_str = ""
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
+
+        market_type = state.get("market_type", "crypto")
+        signal_constraints = get_signal_constraints(market_type)
 
         memory_instruction = ""
         if past_memory_str.strip():
@@ -32,20 +37,13 @@ You MUST check if the current trade setup resembles any past mistake above. If i
 
         prompt = f"""You are the Risk Management Judge. Make the FINAL trading decision.
 
-ALLOWED DECISIONS (pick exactly one):
-- BUY — open a new long position
-- SELL — open a new short position
-- HOLD — no action
-- CLOSE_LONG — exit an existing long position
-- CLOSE_SHORT — exit an existing short position
+{signal_constraints}
 
 CONSTRAINTS:
-- Do NOT suggest partial position reduction, hedging, or simultaneous long+short. The system executes ONE action per signal.
-- Do NOT suggest portfolio allocation percentages. Position size is calculated automatically by risk control.
 - Entry/Stop-loss/Targets must be specific prices, not ranges wider than 2%.
 
 Output in this exact structure:
-**DECISION**: [one of BUY / SELL / HOLD / CLOSE_LONG / CLOSE_SHORT]
+**DECISION**: [your decision]
 **Confidence**: [High/Medium/Low]
 **Entry**: [Price or tight range]
 **Stop-loss**: [Price] (mandatory, max 20% from entry)

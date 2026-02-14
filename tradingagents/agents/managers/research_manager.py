@@ -1,6 +1,8 @@
 import time
 import json
 
+from tradingagents.agents.utils.agent_states import get_signal_constraints
+
 
 def create_research_manager(llm, memory):
     def research_manager_node(state) -> dict:
@@ -19,6 +21,9 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        market_type = state.get("market_type", "crypto")
+        signal_constraints = get_signal_constraints(market_type)
+
         memory_instruction = ""
         if past_memory_str.strip():
             memory_instruction = f"""
@@ -29,17 +34,10 @@ Before deciding, CHECK if your current call repeats any mistake above. If so, ex
 
         prompt = f"""You are the Research Manager. Evaluate the bull/bear debate and make a DECISIVE call.
 
-ALLOWED DECISIONS (pick exactly one):
-- BUY — open a new long position
-- SELL — open a new short position
-- HOLD — no action
-- CLOSE_LONG — exit an existing long position
-- CLOSE_SHORT — exit an existing short position
-
-Do NOT suggest partial reduction, hedging, or simultaneous long+short. One decision only.
+{signal_constraints}
 
 Output in this exact structure:
-**Decision**: [one of BUY / SELL / HOLD / CLOSE_LONG / CLOSE_SHORT]
+**Decision**: [your decision]
 **Winner**: Bull or Bear (who had the stronger data-backed argument)
 **Key reason**: The single most important factor driving your decision
 **Risk**: The biggest risk to your call
