@@ -51,6 +51,8 @@ class AgentState(MessagesState):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
     market_type: Annotated[str, "Market type: 'crypto', 'us', or 'tw'"]
+    suggested_direction: Annotated[str, "Screener direction: 'long', 'short', or ''"]
+    screener_score: Annotated[float, "Screener technical score (0-15+), 0 if unknown"]
 
     sender: Annotated[str, "Agent that sent this message"]
 
@@ -77,10 +79,109 @@ class AgentState(MessagesState):
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
 
 
-def get_signal_constraints(market_type: str) -> str:
-    """Return allowed signals and constraints based on market type."""
+def get_market_context(market_type: str) -> str:
+    """Return market-specific analysis guidance for researchers and managers."""
+    if market_type == "us":
+        return """
+📌 MARKET CONTEXT: US Stock (NYSE/NASDAQ)
+- This is a LONG-ONLY market. No short selling.
+- Key drivers: earnings surprises, Fed policy (rate decisions), sector rotation, institutional positioning.
+- Stop-loss should be 3-8% from entry (NOT 20% — US stocks have no daily price limit and tight spreads).
+- Target horizon: 1-3 months.
+- VIX > 25 = elevated risk environment — reduce confidence.
+- Check if earnings are within 2 weeks — consider the event risk.
+"""
+    elif market_type == "tw":
+        return """
+📌 MARKET CONTEXT: Taiwan Stock (TWSE)
+- This is a LONG-ONLY market. Short selling is restricted.
+- Daily price limit: ±10%. RSI/KD extremes are rarer than in US stocks.
+- Trading hours: 09:00-13:30 (only 4.5 hours). Settlement: T+2.
+- TSMC (2330.TW) represents ~30% of TAIEX — its momentum drives the entire market.
+- Key drivers: 三大法人 (institutional) buying/selling, semiconductor cycle, dividend season (Jun-Sep).
+- Stop-loss should be 5-8% from entry (wider than US due to larger tick sizes and 10% price limit).
+- Target horizon: 1-3 months.
+- Monthly revenue announcements (10th of each month) are key catalysts.
+"""
+    return ""  # crypto: current prompts already optimized
+
+
+def get_signal_constraints(market_type: str, suggested_direction: str = "", screener_score: float = 0) -> str:
+    """Return allowed signals and constraints based on market type and direction.
+
+    When suggested_direction is provided ('long' or 'short'), the signal space
+    is locked to CONFIRM (BUY/SELL) or REJECT (HOLD).  This eliminates
+    non-deterministic flip-flopping on borderline cases.
+    """
+    # Score-based conviction anchor for direction-locked mode
+    if screener_score >= 8:
+        score_hint = f"\n📊 Technical Score: {screener_score:.0f}/10+ (STRONG). Multiple indicators align. Default to CONFIRM unless you identify a specific, concrete risk that outweighs the technical evidence."
+    elif screener_score >= 5:
+        score_hint = f"\n📊 Technical Score: {screener_score:.0f}/10 (MODERATE). Indicators lean favorable. CONFIRM if fundamentals/news support, REJECT only with clear counter-evidence."
+    elif screener_score > 0:
+        score_hint = f"\n📊 Technical Score: {screener_score:.0f}/10 (WEAK). Few indicators align. Be cautious — REJECT (HOLD) unless you find strong fundamental reasons to confirm."
+    else:
+        score_hint = ""
+
+    # --- Pyramid mode (holding + eligible for adding) ---
+    if suggested_direction == "pyramid_long":
+        return f"""⚠️ POSITION: HOLDING LONG — PYRAMID ADD AVAILABLE
+
+ALLOWED DECISIONS (pick exactly one):
+- ADD — add to the long position (requires strong trend confirmation)
+- HOLD — continue holding without adding
+- CLOSE_LONG — exit the long position entirely
+
+⚠️ Adding increases concentration risk. Only ADD if technicals + fundamentals strongly confirm the bullish trend.
+Do NOT use BUY or SELL — use ADD to add to this position.{score_hint}"""
+
+    if suggested_direction == "pyramid_short":
+        return f"""⚠️ POSITION: HOLDING SHORT — PYRAMID ADD AVAILABLE
+
+ALLOWED DECISIONS (pick exactly one):
+- ADD — add to the short position (requires strong bearish confirmation)
+- HOLD — continue holding without adding
+- CLOSE_SHORT — exit the short position entirely
+
+⚠️ Adding increases concentration risk. Only ADD if technicals + fundamentals strongly confirm the bearish trend.
+Do NOT use BUY or SELL — use ADD to add to this position.{score_hint}"""
+
+    # --- Direction-locked mode (screener has pre-determined direction) ---
+    if suggested_direction == "long":
+        return f"""⚠️ DIRECTION LOCKED BY TECHNICAL SCREENER: BULLISH (LONG)
+
+ALLOWED DECISIONS (pick exactly one):
+- BUY — CONFIRM the bullish opportunity (provide Entry/SL/TP)
+- HOLD — REJECT if risks outweigh the opportunity
+
+❌ SELL is NOT allowed. The technical trend is confirmed bullish.
+Your job: evaluate whether this is a GOOD entry with acceptable risk, or REJECT with HOLD.
+Do NOT flip to the opposite direction. Focus on risk assessment and execution quality.{score_hint}"""
+
+    if suggested_direction == "short":
+        return f"""⚠️ DIRECTION LOCKED BY TECHNICAL SCREENER: BEARISH (SHORT)
+
+ALLOWED DECISIONS (pick exactly one):
+- SELL — CONFIRM the bearish/short opportunity (provide Entry/SL/TP)
+- HOLD — REJECT if risks outweigh the opportunity
+
+❌ BUY is NOT allowed. The technical trend is confirmed bearish.
+Your job: evaluate whether this is a GOOD short entry with acceptable risk, or REJECT with HOLD.
+Do NOT flip to the opposite direction. Focus on risk assessment and execution quality.{score_hint}"""
+
+    # --- Free mode (no screener direction, e.g. holding analysis) ---
+    # Score hint for holdings: anchor HOLD vs EXIT decision
+    if screener_score >= 8:
+        hold_hint = f"\n📊 Technical Score: {screener_score:.0f}/10+ (STRONG). Indicators remain favorable — lean toward continuing current position."
+    elif screener_score >= 5:
+        hold_hint = f"\n📊 Technical Score: {screener_score:.0f}/10 (MODERATE). Indicators are mixed — weigh fundamentals carefully before deciding."
+    elif screener_score > 0:
+        hold_hint = f"\n📊 Technical Score: {screener_score:.0f}/10 (WEAK). Indicators are deteriorating — consider whether current position is still justified."
+    else:
+        hold_hint = ""
+
     if market_type == "crypto":
-        return """ALLOWED DECISIONS (pick exactly one):
+        return f"""ALLOWED DECISIONS (pick exactly one):
 - BUY — open a new long position
 - SELL — open a new short position
 - HOLD — no action
@@ -88,12 +189,12 @@ def get_signal_constraints(market_type: str) -> str:
 - CLOSE_SHORT — exit an existing short position
 
 Do NOT suggest partial reduction, hedging, or simultaneous long+short. One decision only.
-Position size is calculated automatically — do NOT specify portfolio %."""
+Position size is calculated automatically — do NOT specify portfolio %.{hold_hint}"""
     else:
-        return """ALLOWED DECISIONS (pick exactly one):
+        return f"""ALLOWED DECISIONS (pick exactly one):
 - BUY — buy shares (open or add to position)
 - SELL — sell existing holdings (reduce or exit position)
 - HOLD — no action
 
 This is a stock (long-only). Do NOT suggest short selling, CLOSE_LONG, or CLOSE_SHORT.
-Position size is calculated automatically — do NOT specify portfolio %."""
+Position size is calculated automatically — do NOT specify portfolio %.{hold_hint}"""

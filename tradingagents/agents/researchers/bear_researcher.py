@@ -2,6 +2,8 @@ from langchain_core.messages import AIMessage
 import time
 import json
 
+from tradingagents.agents.utils.agent_states import get_market_context
+
 
 def create_bear_researcher(llm, memory):
     def bear_node(state) -> dict:
@@ -31,8 +33,11 @@ You MUST factor these lessons into your bear case. If a past lesson shows bearis
 ---
 """
 
-        prompt = f"""You are the Bear Analyst. Make the strongest case AGAINST investing, using specific data from the reports below. Counter the bull's key arguments directly.
+        market_type = state.get("market_type", "crypto")
+        market_context = get_market_context(market_type)
 
+        prompt = f"""You are the Bear Analyst. Make the strongest case AGAINST investing, using specific data from the reports below. Counter the bull's key arguments directly.
+{market_context}
 Structure your response:
 1. **Biggest risks** (2-3 points with specific numbers from reports)
 2. **Bull rebuttal** (expose the bull's weakest assumption with data)

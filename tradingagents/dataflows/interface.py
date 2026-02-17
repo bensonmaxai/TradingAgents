@@ -1,4 +1,7 @@
+import logging
 from typing import Annotated
+
+logger = logging.getLogger(__name__)
 
 # Import from vendor-specific modules
 from .y_finance import (
@@ -161,13 +164,14 @@ def route_to_vendor(method: str, *args, **kwargs):
         try:
             return impl_func(*args, **kwargs)
         except AlphaVantageRateLimitError:
-            continue  # Rate limit → try next vendor
+            logger.warning("[%s] %s rate-limited, trying next vendor", method, vendor)
+            continue
         except Exception as e:
             err_str = str(e)
-            # HTTP 429 / rate limit / quota exceeded → try next vendor
             if "429" in err_str or "rate" in err_str.lower() or "quota" in err_str.lower() or "Too Many Requests" in err_str:
+                logger.warning("[%s] %s rate-limited (%s), trying next vendor", method, vendor, err_str[:80])
                 continue
-            # Other errors: also fallback (better than returning nothing)
+            logger.error("[%s] %s failed: %s", method, vendor, err_str[:200])
             continue
 
-    raise RuntimeError(f"No available vendor for '{method}'")
+    raise RuntimeError(f"No available vendor for '{method}' (tried: {', '.join(fallback_vendors)})")

@@ -22,7 +22,9 @@ def create_research_manager(llm, memory):
             past_memory_str += rec["recommendation"] + "\n\n"
 
         market_type = state.get("market_type", "crypto")
-        signal_constraints = get_signal_constraints(market_type)
+        suggested_direction = state.get("suggested_direction", "")
+        screener_score = state.get("screener_score", 0)
+        signal_constraints = get_signal_constraints(market_type, suggested_direction, screener_score)
 
         memory_instruction = ""
         if past_memory_str.strip():

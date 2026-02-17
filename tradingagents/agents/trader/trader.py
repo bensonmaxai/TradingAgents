@@ -30,7 +30,9 @@ def create_trader(llm, memory):
         }
 
         market_type = state.get("market_type", "crypto")
-        signal_constraints = get_signal_constraints(market_type)
+        suggested_direction = state.get("suggested_direction", "")
+        screener_score = state.get("screener_score", 0)
+        signal_constraints = get_signal_constraints(market_type, suggested_direction, screener_score)
 
         memory_instruction = ""
         if past_memory_str.strip() and past_memory_str != "No past memories found.":

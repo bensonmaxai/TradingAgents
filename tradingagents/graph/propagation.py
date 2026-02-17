@@ -19,6 +19,8 @@ class Propagator:
         self, company_name: str, trade_date: str,
         market_type: str = "crypto",
         pre_reports: Dict[str, str] = None,
+        suggested_direction: str = "",
+        screener_score: float = 0,
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph.
 
@@ -29,12 +31,16 @@ class Propagator:
             pre_reports: Optional dict with pre-fetched report strings
                          (market_report, fundamentals_report, sentiment_report, news_report).
                          When provided, analysts can be skipped (fast mode).
+            suggested_direction: Screener direction lock ('long', 'short', or '' for free mode)
+            screener_score: Technical score from screener (0 if unknown)
         """
         state = {
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
             "market_type": market_type,
+            "suggested_direction": suggested_direction,
+            "screener_score": screener_score,
             "investment_debate_state": InvestDebateState(
                 {"history": "", "current_response": "", "count": 0}
             ),

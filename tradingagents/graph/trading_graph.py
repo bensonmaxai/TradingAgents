@@ -188,7 +188,7 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date, market_type="crypto", pre_reports=None):
+    def propagate(self, company_name, trade_date, market_type="crypto", pre_reports=None, suggested_direction="", screener_score=0):
         """Run the trading agents graph for a company on a specific date.
 
         Args:
@@ -198,13 +198,16 @@ class TradingAgentsGraph:
             pre_reports: Optional dict with pre-fetched report strings.
                          When provided with selected_analysts=[], skips
                          analyst LLM calls entirely (fast mode).
+            suggested_direction: Screener direction lock ('long', 'short', or '' for free mode)
+            screener_score: Technical score from screener (0 if unknown)
         """
 
         self.ticker = company_name
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, market_type=market_type, pre_reports=pre_reports
+            company_name, trade_date, market_type=market_type, pre_reports=pre_reports,
+            suggested_direction=suggested_direction, screener_score=screener_score,
         )
         args = self.propagator.get_graph_args()
 
@@ -233,6 +236,7 @@ class TradingAgentsGraph:
         return final_state, self.process_signal(
             final_state["final_trade_decision"],
             market_type=final_state.get("market_type", "crypto"),
+            suggested_direction=final_state.get("suggested_direction", ""),
         )
 
     def _log_state(self, trade_date, final_state):
@@ -295,6 +299,6 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal, market_type="crypto"):
+    def process_signal(self, full_signal, market_type="crypto", suggested_direction=""):
         """Process a signal to extract the core decision."""
-        return self.signal_processor.process_signal(full_signal, market_type=market_type)
+        return self.signal_processor.process_signal(full_signal, market_type=market_type, suggested_direction=suggested_direction)
