@@ -11,6 +11,9 @@ from datetime import datetime, timedelta
 
 FMP_BASE = "https://financialmodelingprep.com/stable"
 
+# In-memory cache to avoid redundant API calls within the same process
+_cache = {}  # key -> (timestamp, value)
+
 
 def _get_fmp_key():
     """Get FMP API key from environment or secrets file."""
@@ -27,8 +30,21 @@ def _get_fmp_key():
     return None
 
 
-def _fmp_get(endpoint, params=None):
-    """Make FMP API request."""
+def _fmp_get(endpoint, params=None, cache_ttl=3600):
+    """Make FMP API request with optional caching.
+
+    Args:
+        cache_ttl: Cache lifetime in seconds (default 1h). Set 0 to skip cache.
+    """
+    import time as _time
+
+    # Check cache first
+    cache_key = f"{endpoint}:{json.dumps(params or {}, sort_keys=True)}"
+    if cache_ttl > 0 and cache_key in _cache:
+        ts, val = _cache[cache_key]
+        if _time.time() - ts < cache_ttl:
+            return val
+
     key = _get_fmp_key()
     if not key:
         return None
@@ -41,7 +57,10 @@ def _fmp_get(endpoint, params=None):
     resp = requests.get(url, params=p, timeout=10)
     if resp.status_code == 200:
         try:
-            return resp.json()
+            data = resp.json()
+            if cache_ttl > 0:
+                _cache[cache_key] = (_time.time(), data)
+            return data
         except Exception:
             return None
     return None
