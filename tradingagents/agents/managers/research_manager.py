@@ -1,3 +1,4 @@
+from datetime import date
 import time
 import json
 
@@ -15,7 +16,8 @@ def create_research_manager(llm, memory):
         investment_debate_state = state["investment_debate_state"]
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
+        past_memories = memory.get_memories(curr_situation, n_matches=2,
+                                              reference_date=date.today())
 
         past_memory_str = ""
         for i, rec in enumerate(past_memories, 1):

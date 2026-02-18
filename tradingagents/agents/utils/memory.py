@@ -6,6 +6,7 @@ no token limits, works offline with any LLM provider.
 
 from rank_bm25 import BM25Okapi
 from typing import List, Tuple
+from datetime import datetime, date
 import re
 
 
@@ -37,6 +38,13 @@ class FinancialSituationMemory:
         tokens = re.findall(r'\b\w+\b', text.lower())
         return tokens
 
+    def _extract_date(self, text: str):
+        """Extract date from memory document text (YYYY-MM-DD format in parens)."""
+        m = re.search(r'\((\d{4}-\d{2}-\d{2})\)', text[:500])
+        if m:
+            return datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        return None
+
     def _rebuild_index(self):
         """Rebuild the BM25 index after adding documents (pinned + regular)."""
         all_docs = self.pinned_documents + self.documents
@@ -65,14 +73,21 @@ class FinancialSituationMemory:
         # Rebuild BM25 index with new documents
         self._rebuild_index()
 
-    def get_memories(self, current_situation: str, n_matches: int = 1) -> List[dict]:
-        """Find matching recommendations using BM25 similarity.
+    def get_memories(self, current_situation: str, n_matches: int = 1,
+                     reference_date=None) -> List[dict]:
+        """Find matching recommendations using BM25 similarity with time weighting.
 
         Searches across both pinned (playbook) and regular (reflection) entries.
+        When reference_date is provided, applies time-based weight multipliers:
+          - Pinned: ×4.0 (always highest priority)
+          - 0-7 days: ×3.0 (recent lessons most relevant)
+          - 8-30 days: ×2.0 (mid-term patterns)
+          - 31+ days: ×1.0 (long-term, lowest priority)
 
         Args:
             current_situation: The current financial situation to match against
             n_matches: Number of top matches to return
+            reference_date: Date to calculate memory age from (None = no time weighting)
 
         Returns:
             List of dicts with matched_situation, recommendation, and similarity_score
@@ -89,12 +104,28 @@ class FinancialSituationMemory:
         # Get BM25 scores for all documents
         scores = self.bm25.get_scores(query_tokens)
 
+        # Apply time-based weighting (FinMem-style tiered memory)
+        if reference_date:
+            n_pinned = len(self.pinned_documents)
+            for i in range(len(scores)):
+                if i < n_pinned:
+                    scores[i] *= 4.0  # Pinned playbook: highest priority
+                else:
+                    doc_date = self._extract_date(all_docs[i])
+                    if doc_date:
+                        age_days = (reference_date - doc_date).days
+                        if age_days <= 7:
+                            scores[i] *= 3.0  # Recent
+                        elif age_days <= 30:
+                            scores[i] *= 2.0  # Mid-term
+                        # else: ×1.0 (long-term, no change)
+
         # Get top-n indices sorted by score (descending)
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:n_matches]
 
         # Build results
-        results = []
         max_score = max(scores) if max(scores) > 0 else 1  # Normalize scores
+        results = []
 
         for idx in top_indices:
             # Normalize score to 0-1 range for consistency
@@ -120,46 +151,47 @@ class FinancialSituationMemory:
 
 
 if __name__ == "__main__":
-    # Example usage
-    matcher = FinancialSituationMemory("test_memory")
+    from datetime import timedelta
 
-    # Example data
-    example_data = [
-        (
-            "High inflation rate with rising interest rates and declining consumer spending",
-            "Consider defensive sectors like consumer staples and utilities. Review fixed-income portfolio duration.",
-        ),
-        (
-            "Tech sector showing high volatility with increasing institutional selling pressure",
-            "Reduce exposure to high-growth tech stocks. Look for value opportunities in established tech companies with strong cash flows.",
-        ),
-        (
-            "Strong dollar affecting emerging markets with increasing forex volatility",
-            "Hedge currency exposure in international positions. Consider reducing allocation to emerging market debt.",
-        ),
-        (
-            "Market showing signs of sector rotation with rising yields",
-            "Rebalance portfolio to maintain target allocations. Consider increasing exposure to sectors benefiting from higher rates.",
-        ),
+    print("=== Tiered Memory Test ===\n")
+    matcher = FinancialSituationMemory("test_memory")
+    today = date.today()
+
+    # Pinned playbook
+    matcher.pinned_documents = [
+        "BTCUSDT volatility spike with leverage flush (pinned playbook)",
+    ]
+    matcher.pinned_recommendations = [
+        "PINNED: Always use tight stops on leveraged crypto positions during high volatility.",
     ]
 
-    # Add the example situations and recommendations
+    # Time-varied memories (same topic, different ages)
+    example_data = [
+        (
+            f"BTCUSDT dropped 5% after Fed hawkish comments ({(today - timedelta(days=60)).isoformat()})",
+            "OLD (60d): Fed rhetoric caused panic but recovered within 2 weeks.",
+        ),
+        (
+            f"BTCUSDT rallied 8% on ETF inflow news ({(today - timedelta(days=15)).isoformat()})",
+            "MID (15d): ETF flows are reliable short-term catalyst for BTC.",
+        ),
+        (
+            f"BTCUSDT whipsawed 3% on mixed CPI data ({(today - timedelta(days=3)).isoformat()})",
+            "RECENT (3d): CPI surprises cause initial knee-jerk then reversal — wait 4h before acting.",
+        ),
+    ]
     matcher.add_situations(example_data)
 
-    # Example query
-    current_situation = """
-    Market showing increased volatility in tech sector, with institutional investors
-    reducing positions and rising interest rates affecting growth stock valuations
-    """
+    query = "BTCUSDT showing volatility after macro data release"
 
-    try:
-        recommendations = matcher.get_memories(current_situation, n_matches=2)
+    print("--- Without time weighting ---")
+    results = matcher.get_memories(query, n_matches=3)
+    for i, rec in enumerate(results, 1):
+        print(f"  #{i} score={rec['similarity_score']:.3f} | {rec['recommendation'][:80]}")
 
-        for i, rec in enumerate(recommendations, 1):
-            print(f"\nMatch {i}:")
-            print(f"Similarity Score: {rec['similarity_score']:.2f}")
-            print(f"Matched Situation: {rec['matched_situation']}")
-            print(f"Recommendation: {rec['recommendation']}")
+    print("\n--- With time weighting (reference_date=today) ---")
+    results = matcher.get_memories(query, n_matches=3, reference_date=today)
+    for i, rec in enumerate(results, 1):
+        print(f"  #{i} score={rec['similarity_score']:.3f} | {rec['recommendation'][:80]}")
 
-    except Exception as e:
-        print(f"Error during recommendation: {str(e)}")
+    print("\nExpected: Pinned > Recent(3d) > Mid(15d) > Old(60d)")
