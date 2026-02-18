@@ -53,7 +53,7 @@ You MUST adjust your entry/stop-loss/target based on these lessons. If a past le
 **Entry price**: [specific price or tight range]
 **Stop-loss**: [specific price] (mandatory)
 **Target**: [specific price, 1-3 month horizon]
-**Confidence**: [High/Medium/Low with one-line reason]
+**Confidence**: [0-100 integer with one-line reason]
 
 Then conclude with: FINAL TRANSACTION PROPOSAL: **[your decision]**
 {memory_instruction}""",

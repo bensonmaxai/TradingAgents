@@ -93,7 +93,18 @@ class TradingAgentsGraph:
 
         self.deep_thinking_llm = deep_client.get_llm()
         self.quick_thinking_llm = quick_client.get_llm()
-        
+
+        # Local LLM for simple extraction tasks (e.g., signal processing)
+        # Saves cloud API quota by using local Ollama for trivial classification
+        if self.config.get("local_llm"):
+            local_client = create_llm_client(
+                provider=self.config.get("local_provider", "ollama"),
+                model=self.config["local_llm"],
+            )
+            self.local_llm = local_client.get_llm()
+        else:
+            self.local_llm = self.quick_thinking_llm
+
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
@@ -125,7 +136,7 @@ class TradingAgentsGraph:
             max_recur_limit=self.config.get("max_recur_limit", 100),
         )
         self.reflector = Reflector(self.quick_thinking_llm)
-        self.signal_processor = SignalProcessor(self.quick_thinking_llm)
+        self.signal_processor = SignalProcessor(self.local_llm)
 
         # State tracking
         self.curr_state = None

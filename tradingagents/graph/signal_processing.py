@@ -67,12 +67,21 @@ class SignalProcessor:
             ("human", full_signal),
         ]
 
-        raw = self.quick_thinking_llm.invoke(messages).content
+        try:
+            raw = self.quick_thinking_llm.invoke(messages).content
+        except Exception:
+            # LLM failed (e.g., Ollama down) — try regex on raw input directly
+            raw = ""
 
         # Validate: extract first valid signal token from LLM response
         match = _SIGNAL_RE.search(raw)
         if match and match.group(1) in allowed:
             return match.group(1)
 
-        # Fallback: safe default
+        # Fallback: try regex on the original full_signal text
+        match = _SIGNAL_RE.search(full_signal)
+        if match and match.group(1) in allowed:
+            return match.group(1)
+
+        # Safe default
         return "HOLD"

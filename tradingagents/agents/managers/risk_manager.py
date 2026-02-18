@@ -13,7 +13,7 @@ def _parse_decision_fields(text):
     fields = {}
     patterns = {
         "decision": r'\*\*DECISION\*\*[:\s]+(.+)',
-        "confidence": r'\*\*Confidence\*\*[:\s]+(\w+)',
+        "confidence": r'\*\*Confidence\*\*[:\s]+(\d{1,3}|\w+)',
         "entry": r'\*\*Entry\*\*[:\s]+\$?([\d,\.]+)',
         "stop_loss": r'\*\*Stop-loss\*\*[:\s]+\$?([\d,\.]+)',
         "target1": r'\*\*Target 1\*\*[:\s]+\$?([\d,\.]+)',
@@ -70,6 +70,16 @@ def _validate_decision(fields, market_type, suggested_direction, has_memory):
             issues.append(f"For SELL, Stop-loss ({sl}) should be above Entry ({entry}).")
         if tp1 > 0 and tp1 > entry:
             issues.append(f"For SELL, Target 1 ({tp1}) should be below Entry ({entry}).")
+
+    # Confidence must be 0-100 integer
+    conf = fields.get("confidence", "")
+    try:
+        conf_int = int(conf)
+        if not (0 <= conf_int <= 100):
+            issues.append(f"Confidence {conf_int} must be 0-100.")
+    except (ValueError, TypeError):
+        if conf.lower() not in ("high", "medium", "low"):
+            issues.append(f"Confidence must be integer 0-100, got '{conf}'")
 
     # Lessons check
     if has_memory:
@@ -167,14 +177,16 @@ You MUST check if the current trade setup resembles any past mistake above. If i
 CONSTRAINTS:
 - Entry/Stop-loss/Targets must be specific prices, not ranges wider than 2%.
 
-Output in this exact structure:
+Output in this exact structure (every field mandatory):
 **DECISION**: [your decision]
-**Confidence**: [High/Medium/Low]
-**Entry**: [Price or tight range]
+**Confidence**: [0-100 integer]
+  Scoring guide: 80-100=strong multi-signal alignment, 60-79=moderate, 40-59=mixed/uncertain, 20-39=weak, 0-19=no case
+**Entry**: [specific price]
 **Stop-loss**: [Price] (mandatory, max {sl_max} from entry)
 **Target 1**: [Price] (partial take-profit ~50%)
 **Target 2**: [Price] (full exit)
 **Key risk**: [Single biggest threat to this trade]
+**Data quality note**: [which data sources were missing or weak, and how it affected your analysis]
 **Lessons applied**: Which past lesson(s) influenced this decision
 **Risk-adjusted rationale**: [3-4 sentences — which analyst was most right and why, adjusted from trader's plan: {trader_plan}]
 {memory_instruction}{devils_advocate}
