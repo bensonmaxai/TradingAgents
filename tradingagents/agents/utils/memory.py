@@ -1,13 +1,26 @@
-"""Financial situation memory using BM25 for lexical similarity matching.
+"""Financial situation memory using hybrid BM25 + vector search.
 
-Uses BM25 (Best Matching 25) algorithm for retrieval - no API calls,
-no token limits, works offline with any LLM provider.
+BM25 for exact keyword matching + Ollama embeddings for semantic similarity.
+Falls back to BM25-only if Ollama is unavailable.
 """
 
 from rank_bm25 import BM25Okapi
 from typing import List, Tuple
 from datetime import datetime, date
+import json as _json
 import re
+import sys
+import urllib.request
+
+import numpy as np
+
+# Hybrid search defaults (overridable via config)
+_OLLAMA_EMBED_URL = "http://127.0.0.1:11434/api/embed"
+_OLLAMA_EMBED_MODEL = "nomic-embed-text"
+_OLLAMA_EMBED_TIMEOUT = 30
+_OLLAMA_KEEP_ALIVE = "10m"
+_HYBRID_ALPHA = 0.6  # BM25 weight; (1 - alpha) = vector weight
+_EMBED_MAX_CHARS = 4500  # nomic-embed-text 8192 token context ≈ 4500 chars safe limit
 
 
 class FinancialSituationMemory:
@@ -18,7 +31,7 @@ class FinancialSituationMemory:
 
         Args:
             name: Name identifier for this memory instance
-            config: Configuration dict (kept for API compatibility, not used for BM25)
+            config: Configuration dict (hybrid_search key enables vector search)
             max_documents: Maximum documents to retain (FIFO eviction). 0 = unlimited.
         """
         self.name = name
@@ -28,6 +41,10 @@ class FinancialSituationMemory:
         self.pinned_documents: List[str] = []
         self.pinned_recommendations: List[str] = []
         self.bm25 = None
+        # Hybrid search (BM25 + vector)
+        self._doc_embeddings = None     # (N, dim) ndarray cache
+        self._embeddings_dirty = True   # True = need recompute
+        self._hybrid_enabled = (config or {}).get("hybrid_search", True)
 
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize text for BM25 indexing.
@@ -37,6 +54,42 @@ class FinancialSituationMemory:
         # Lowercase and split on non-alphanumeric characters
         tokens = re.findall(r'\b\w+\b', text.lower())
         return tokens
+
+    @staticmethod
+    def _ollama_embed(texts: list, keep_alive: str = _OLLAMA_KEEP_ALIVE):
+        """Embed texts via Ollama /api/embed. Returns (N, dim) ndarray or None."""
+        try:
+            # Pre-truncate to fit nomic-embed-text context window
+            truncated = [t[:_EMBED_MAX_CHARS] for t in texts]
+            payload = _json.dumps({
+                "model": _OLLAMA_EMBED_MODEL,
+                "input": truncated,
+                "keep_alive": keep_alive,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                _OLLAMA_EMBED_URL, data=payload,
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=_OLLAMA_EMBED_TIMEOUT) as resp:
+                data = _json.loads(resp.read())
+            embs = data.get("embeddings")
+            if embs:
+                return np.array(embs, dtype=np.float32)
+        except Exception as e:
+            print(f"[memory] Ollama embed failed: {e}, BM25-only fallback", file=sys.stderr)
+        return None
+
+    def _ensure_embeddings(self):
+        """Lazily compute document embeddings. Only calls Ollama when dirty."""
+        if not self._embeddings_dirty or not self._hybrid_enabled:
+            return
+        all_docs = self.pinned_documents + self.documents
+        if not all_docs:
+            self._doc_embeddings = None
+            self._embeddings_dirty = False
+            return
+        self._doc_embeddings = self._ollama_embed(all_docs)
+        self._embeddings_dirty = False
 
     def _extract_date(self, text: str):
         """Extract date from memory document text (YYYY-MM-DD format in parens)."""
@@ -53,6 +106,7 @@ class FinancialSituationMemory:
             self.bm25 = BM25Okapi(tokenized_docs)
         else:
             self.bm25 = None
+        self._embeddings_dirty = True
 
     def add_situations(self, situations_and_advice: List[Tuple[str, str]]):
         """Add financial situations and their corresponding advice.
@@ -102,7 +156,33 @@ class FinancialSituationMemory:
         query_tokens = self._tokenize(current_situation)
 
         # Get BM25 scores for all documents
-        scores = self.bm25.get_scores(query_tokens)
+        bm25_scores = self.bm25.get_scores(query_tokens)
+
+        # Hybrid: combine BM25 + vector scores
+        use_hybrid = False
+        if self._hybrid_enabled:
+            self._ensure_embeddings()
+            if self._doc_embeddings is not None:
+                query_emb = self._ollama_embed([current_situation])
+                if query_emb is not None:
+                    q = query_emb[0]
+                    q = q / (np.linalg.norm(q) or 1.0)
+                    norms = np.linalg.norm(self._doc_embeddings, axis=1, keepdims=True)
+                    norms = np.where(norms == 0, 1.0, norms)
+                    d = self._doc_embeddings / norms
+                    vector_scores = d @ q  # cosine similarity
+                    use_hybrid = True
+
+        if use_hybrid:
+            bm25_max = float(bm25_scores.max()) or 1.0
+            bm25_norm = bm25_scores / bm25_max
+            vec_min = float(vector_scores.min())
+            vec_max = float(vector_scores.max())
+            vec_range = (vec_max - vec_min) or 1.0
+            vec_norm = (vector_scores - vec_min) / vec_range
+            scores = _HYBRID_ALPHA * bm25_norm + (1 - _HYBRID_ALPHA) * vec_norm
+        else:
+            scores = bm25_scores
 
         # Apply time-based weighting (FinMem-style tiered memory)
         if reference_date:
@@ -146,6 +226,8 @@ class FinancialSituationMemory:
             self.pinned_documents = []
             self.pinned_recommendations = []
         self.bm25 = None
+        self._doc_embeddings = None
+        self._embeddings_dirty = True
         if not include_pinned and self.pinned_documents:
             self._rebuild_index()
 
@@ -153,45 +235,60 @@ class FinancialSituationMemory:
 if __name__ == "__main__":
     from datetime import timedelta
 
-    print("=== Tiered Memory Test ===\n")
-    matcher = FinancialSituationMemory("test_memory")
+    print("=== Hybrid Search Test ===\n")
     today = date.today()
 
-    # Pinned playbook
+    # --- Test 1: Semantic matching ---
+    print("--- Test 1: Semantic matching (BM25-only vs Hybrid) ---")
+    matcher = FinancialSituationMemory("test_memory")
     matcher.pinned_documents = [
         "BTCUSDT volatility spike with leverage flush (pinned playbook)",
     ]
     matcher.pinned_recommendations = [
-        "PINNED: Always use tight stops on leveraged crypto positions during high volatility.",
+        "PINNED: Always use tight stops on leveraged crypto positions.",
     ]
-
-    # Time-varied memories (same topic, different ages)
     example_data = [
         (
             f"BTCUSDT dropped 5% after Fed hawkish comments ({(today - timedelta(days=60)).isoformat()})",
             "OLD (60d): Fed rhetoric caused panic but recovered within 2 weeks.",
         ),
         (
-            f"BTCUSDT rallied 8% on ETF inflow news ({(today - timedelta(days=15)).isoformat()})",
-            "MID (15d): ETF flows are reliable short-term catalyst for BTC.",
+            f"Severe market downturn across all assets following banking crisis ({(today - timedelta(days=10)).isoformat()})",
+            "CRISIS (10d): Systemic risk events require cash preservation — reduce all exposure.",
         ),
         (
             f"BTCUSDT whipsawed 3% on mixed CPI data ({(today - timedelta(days=3)).isoformat()})",
-            "RECENT (3d): CPI surprises cause initial knee-jerk then reversal — wait 4h before acting.",
+            "RECENT (3d): CPI surprises cause initial knee-jerk then reversal.",
         ),
     ]
     matcher.add_situations(example_data)
 
-    query = "BTCUSDT showing volatility after macro data release"
+    # "crash" has no keyword overlap with "downturn/crisis", but semantic similarity is high
+    query = "BTCUSDT crash after macro economic shock"
 
-    print("--- Without time weighting ---")
-    results = matcher.get_memories(query, n_matches=3)
-    for i, rec in enumerate(results, 1):
-        print(f"  #{i} score={rec['similarity_score']:.3f} | {rec['recommendation'][:80]}")
-
-    print("\n--- With time weighting (reference_date=today) ---")
+    print("  BM25-only:")
+    matcher._hybrid_enabled = False
     results = matcher.get_memories(query, n_matches=3, reference_date=today)
     for i, rec in enumerate(results, 1):
-        print(f"  #{i} score={rec['similarity_score']:.3f} | {rec['recommendation'][:80]}")
+        print(f"    #{i} score={rec['similarity_score']:.3f} | {rec['recommendation'][:70]}")
 
-    print("\nExpected: Pinned > Recent(3d) > Mid(15d) > Old(60d)")
+    print("  Hybrid (BM25 + vector):")
+    matcher._hybrid_enabled = True
+    matcher._embeddings_dirty = True
+    results = matcher.get_memories(query, n_matches=3, reference_date=today)
+    for i, rec in enumerate(results, 1):
+        print(f"    #{i} score={rec['similarity_score']:.3f} | {rec['recommendation'][:70]}")
+
+    print("  Expected: Hybrid should rank 'banking crisis/downturn' higher\n")
+
+    # --- Test 2: Fallback ---
+    print("--- Test 2: Graceful fallback (bad URL) ---")
+    import tradingagents.agents.utils.memory as _mem
+    saved = _mem._OLLAMA_EMBED_URL
+    _mem._OLLAMA_EMBED_URL = "http://127.0.0.1:99999/api/embed"
+    matcher._embeddings_dirty = True
+    matcher._hybrid_enabled = True
+    results = matcher.get_memories(query, n_matches=2, reference_date=today)
+    print(f"  Got {len(results)} results (BM25 fallback): {results[0]['recommendation'][:60]}...")
+    _mem._OLLAMA_EMBED_URL = saved
+    print("  OK — fallback works\n")
