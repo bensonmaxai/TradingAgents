@@ -40,6 +40,8 @@ You MUST factor these lessons into your bull case. If a past lesson contradicts 
 
         prompt = f"""You are the Bull Analyst. Make the strongest case FOR investing, using specific data from the reports below. Counter the bear's key arguments directly.
 {market_context}
+IMPORTANT: All available data is provided in the reports below. Check the "Data provided above" line and the Data Availability section before claiming ANY data is missing. If data is listed as provided (✓), you MUST reference it — do NOT say it is unavailable.
+
 Structure your response:
 1. **Strongest bull case** (2-3 points with specific numbers from reports)
 2. **Bear rebuttal** (address bear's weakest argument with data)

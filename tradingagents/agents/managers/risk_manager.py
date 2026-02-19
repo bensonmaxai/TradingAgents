@@ -188,7 +188,7 @@ Output in this exact structure (every field mandatory):
 **Target 1**: [Price] (partial take-profit ~50%)
 **Target 2**: [Price] (full exit)
 **Key risk**: [Single biggest threat to this trade]
-**Data quality note**: [which data sources were missing or weak, and how it affected your analysis]
+**Data quality note**: [Check the "Data provided above" and Data Availability sections in the market report. ONLY list sources marked ✗ as missing. If all sources show ✓, write "All data sources available".]
 **Lessons applied**: Which past lesson(s) influenced this decision
 **Risk-adjusted rationale**: [3-4 sentences — which analyst was most right and why, adjusted from trader's plan: {trader_plan}]
 {memory_instruction}{devils_advocate}
