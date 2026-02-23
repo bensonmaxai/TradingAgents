@@ -57,6 +57,10 @@ def _validate_decision(fields, market_type, suggested_direction, has_memory):
         issues.append(f"Decision '{decision}' contradicts locked LONG direction.")
     elif suggested_direction == "short" and "BUY" in decision:
         issues.append(f"Decision '{decision}' contradicts locked SHORT direction.")
+    elif suggested_direction == "holding_long" and decision not in ("HOLD", "CLOSE_LONG"):
+        issues.append(f"Decision '{decision}' not allowed when HOLDING LONG. Only HOLD or CLOSE_LONG.")
+    elif suggested_direction == "holding_short" and decision not in ("HOLD", "CLOSE_SHORT"):
+        issues.append(f"Decision '{decision}' not allowed when HOLDING SHORT. Only HOLD or CLOSE_SHORT.")
 
     # Price logic for BUY
     if "BUY" in decision and entry > 0:
@@ -137,7 +141,8 @@ def create_risk_manager(llm, memory):
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2,
-                                              reference_date=date.today())
+                                              reference_date=date.today(),
+                                              ticker=state.get("company_of_interest"))
 
         past_memory_str = ""
         for i, rec in enumerate(past_memories, 1):
@@ -177,6 +182,9 @@ You MUST check if the current trade setup resembles any past mistake above. If i
 {signal_constraints}
 {market_context}
 CONSTRAINTS:
+- Multi-Timeframe Rule: Higher timeframe defines direction, lower timeframe triggers entry. If Daily and 4H disagree on direction, HOLD. If direction is aligned but 1H/60m entry trigger (EMA9/21 crossover) has not confirmed, wait — do not chase.
+- No-Chase Rule: Entry price MUST be within 1 ATR of a key S/R level (SMA50, SMA20, BB bands, swing high/low). If price is >1 ATR away from all key levels, wait for a pullback — do not chase.
+- Anti-FOMO Rule: Check the Entry Quality field. If at_high → do NOT BUY (wait for pullback). If at_low → do NOT SELL. Only enter on pullback or neutral conditions.
 - Entry/Stop-loss/Targets must be specific prices, not ranges wider than 2%.
 
 Output in this exact structure (every field mandatory):

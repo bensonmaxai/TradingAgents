@@ -17,7 +17,8 @@ def create_trader(llm, memory):
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2,
-                                              reference_date=date.today())
+                                              reference_date=date.today(),
+                                              ticker=state.get("company_of_interest"))
 
         past_memory_str = ""
         if past_memories:
@@ -50,6 +51,10 @@ You MUST adjust your entry/stop-loss/target based on these lessons. If a past le
                 "content": f"""You are a trader. Based on the investment plan, output a concrete trading plan.
 
 {signal_constraints}
+
+Rules:
+- No-Chase: Entry must be within 1 ATR of a key S/R level. If price is far from all levels, recommend waiting for pullback.
+- Anti-FOMO: If price is at recent high (for BUY) or recent low (for SELL), wait for pullback confirmation before entry.
 
 **Action**: [your decision]
 **Entry price**: [specific price or tight range]
